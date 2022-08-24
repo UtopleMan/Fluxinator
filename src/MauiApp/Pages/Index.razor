@@ -1,0 +1,135 @@
+﻿@using Fluxinator.Model
+@using Fluxinator.ApiClient
+@using Microsoft.Fast.Components.FluentUI
+@using System.Linq
+
+@inject IDeploymentClient client
+@page "/"
+<style>
+    fluent-badge {
+        --badge-fill-highlight: #ffd800;
+        --badge-fill-lowlight: #333;
+        --badge-color-highlight: #000;
+        --badge-color-lowlight: #fff;
+    }
+</style>
+<FluentToolbar id="toolbar-fluent-components-two" style="width:100%">
+    <FluentTextField @oninput="FilterChanged"></FluentTextField>
+    <FluentCombobox slot="end" Appearance="Appearance.Filled" Options=@namespaces @bind-Value="@namespaceName"></FluentCombobox>
+</FluentToolbar>
+<FluentDataGrid id="grid" GridTemplateColumns="85px 130px 8fr 130px 85px" RowsData=DisplayedRows ColumnDefinitions=Columns @ref=grid>
+    <RowItemTemplate>
+        <FluentDataGridRow>
+            <FluentDataGridCell GridColumn=1>
+                @if (context.LatestReason == "ReconciliationSucceeded")
+                {
+                        <FluentBadge Appearance="Appearance.Accent">
+                            Succeeded
+                        </FluentBadge>
+                }
+                else if (context.LatestReason == "Progressing")
+                {
+                        <FluentProgressRing></FluentProgressRing>
+                }
+                else
+                {
+                        <FluentBadge Fill="highlight" Color="highlight">
+                            Failed
+                        </FluentBadge>
+                }
+            </FluentDataGridCell>
+            <FluentDataGridCell GridColumn=2>
+                @context.Name
+            </FluentDataGridCell>
+            <FluentDataGridCell GridColumn=3>
+                @context.LatestMessage
+            </FluentDataGridCell>
+            <FluentDataGridCell GridColumn=4>
+                @context.LatestTime.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+            </FluentDataGridCell>
+            <FluentDataGridCell GridColumn=5>
+                <FluentButton @onclick="() => Deploy(context.Namespace, context.Name)">Deploy</FluentButton>
+            </FluentDataGridCell>
+        </FluentDataGridRow>
+    </RowItemTemplate>
+</FluentDataGrid>
+
+@code {
+    private List<ColumnDefinition<Deployment>> Columns = new();
+    private FluentDataGrid<Deployment> grid;
+    private List<Deployment> Rows = new();
+    private List<Deployment> DisplayedRows = new();
+    private List<Option<string>> namespaces = new();
+    private Timer timer;
+    private string namespaceName = "flux-system";
+    private bool disposed = false;
+
+    void LocationChanged(object sender, LocationChangedEventArgs e)
+    {
+        timer.Dispose();
+    }
+    protected override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            timer = new Timer(async state => { await InvokeAsync(UpdateView); }, null, 0, 1000);
+        }
+        return Task.CompletedTask;
+    }
+    private async Task UpdateView()
+    {
+        Rows = (await client.GetDeployments(namespaceName)).ToList();
+        var changed = false;
+        if (Rows.Count() != DisplayedRows.Count())
+            changed = true;
+        foreach (var row in Rows)
+            if (!DisplayedRows.Any(x => x.Name == row.Name && x.Namespace == row.Namespace && x.LatestReason == row.LatestReason && x.LatestTime == row.LatestTime))
+                changed = true;
+        if (!changed) return;
+        DisplayedRows = Rows.OrderBy(x => x.Namespace + x.Name).ToList();
+        StateHasChanged();
+    }
+    protected async Task Deploy(string namespaceName, string name)
+    {
+        await client.Redeploy(namespaceName, name);
+    }
+    public void Dispose() => Dispose(true);
+
+    public void Dispose(bool disposing)
+    {
+        if (disposed) return;
+        timer.Dispose();
+        disposed = true;
+    }
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+        Columns.Add(new ColumnDefinition<Deployment>("", x => x.LatestReason));
+        Columns.Add(new ColumnDefinition<Deployment>("Name", x => x.Name));
+        Columns.Add(new ColumnDefinition<Deployment>("Message", x => x.LatestMessage));
+        Columns.Add(new ColumnDefinition<Deployment>("Time", x => x.LatestTime));
+        Columns.Add(new ColumnDefinition<Deployment>("", x => x.Namespace));
+        Rows = (await client.GetDeployments(namespaceName)).ToList();
+        namespaces = (await client.GetNamespaces()).Select(x => new Option<string> { Key = x, Value = x }).ToList();
+        DisplayedRows = Rows.ToList();
+    }
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+    }
+
+    private void FilterChanged(ChangeEventArgs args)
+    {
+        var filter = args.Value as string;
+
+        if (string.IsNullOrWhiteSpace(filter))
+        {
+            DisplayedRows = Rows;
+        }
+        else
+        {
+            DisplayedRows = Rows.Where(x => x.Name.Contains(filter)).ToList();
+        }
+    }
+}
