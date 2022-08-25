@@ -14,7 +14,8 @@
     }
 </style>
 <FluentToolbar id="toolbar-fluent-components-two" style="width:100%">
-    <FluentTextField @oninput="FilterChanged"></FluentTextField>
+    <FluentTextField slot="start" @oninput="FilterChanged"></FluentTextField>
+    <FluentCombobox slot="end" Appearance="Appearance.Filled" Options=@contexts @bind-Value="@selectedContext" style="margin-right: 5px;"></FluentCombobox>
     <FluentCombobox slot="end" Appearance="Appearance.Filled" Options=@namespaces @bind-Value="@namespaceName"></FluentCombobox>
 </FluentToolbar>
 <FluentDataGrid id="grid" GridTemplateColumns="85px 130px 8fr 130px 85px" RowsData=DisplayedRows ColumnDefinitions=Columns @ref=grid>
@@ -57,12 +58,15 @@
 @code {
     private List<ColumnDefinition<Deployment>> Columns = new();
     private FluentDataGrid<Deployment> grid;
+    private List<Option<string>> contexts = new();
     private List<Deployment> Rows = new();
     private List<Deployment> DisplayedRows = new();
     private List<Option<string>> namespaces = new();
     private Timer timer;
     private string namespaceName = "flux-system";
+    private string selectedContext = "";
     private bool disposed = false;
+    private string filter = "";
 
     void LocationChanged(object sender, LocationChangedEventArgs e)
     {
@@ -78,20 +82,21 @@
     }
     private async Task UpdateView()
     {
-        Rows = (await client.GetDeployments(namespaceName)).ToList();
+        var newRows = (await client.GetDeployments(selectedContext, namespaceName)).ToList();
         var changed = false;
-        if (Rows.Count() != DisplayedRows.Count())
+        if (Rows.Count() != newRows.Count())
             changed = true;
-        foreach (var row in Rows)
-            if (!DisplayedRows.Any(x => x.Name == row.Name && x.Namespace == row.Namespace && x.LatestReason == row.LatestReason && x.LatestTime == row.LatestTime))
+        foreach (var row in newRows)
+            if (!Rows.Any(x => x.Name == row.Name && x.Namespace == row.Namespace && x.LatestReason == row.LatestReason && x.LatestTime == row.LatestTime))
                 changed = true;
         if (!changed) return;
-        DisplayedRows = Rows.OrderBy(x => x.Namespace + x.Name).ToList();
+        Rows = newRows.ToList();
+        DisplayedRows = Rows.Where(x => (x.Namespace + x.Name).Contains(filter)).OrderBy(x => x.Namespace + x.Name).ToList();
         StateHasChanged();
     }
     protected async Task Deploy(string namespaceName, string name)
     {
-        await client.Redeploy(namespaceName, name);
+        await client.Redeploy(selectedContext, namespaceName, name);
     }
     public void Dispose() => Dispose(true);
 
@@ -109,8 +114,12 @@
         Columns.Add(new ColumnDefinition<Deployment>("Message", x => x.LatestMessage));
         Columns.Add(new ColumnDefinition<Deployment>("Time", x => x.LatestTime));
         Columns.Add(new ColumnDefinition<Deployment>("", x => x.Namespace));
-        Rows = (await client.GetDeployments(namespaceName)).ToList();
-        namespaces = (await client.GetNamespaces()).Select(x => new Option<string> { Key = x, Value = x }).ToList();
+
+        contexts = client.GetContexts().Select(x => new Option<string> { Key = x, Value = x }).ToList();
+        selectedContext = contexts.First().Key;
+
+        Rows = (await client.GetDeployments(selectedContext, namespaceName)).ToList();
+        namespaces = (await client.GetNamespaces(selectedContext)).Select(x => new Option<string> { Key = x, Value = x }).ToList();
         DisplayedRows = Rows.ToList();
     }
 
@@ -121,7 +130,7 @@
 
     private void FilterChanged(ChangeEventArgs args)
     {
-        var filter = args.Value as string;
+        filter = args.Value as string;
 
         if (string.IsNullOrWhiteSpace(filter))
         {
@@ -129,7 +138,7 @@
         }
         else
         {
-            DisplayedRows = Rows.Where(x => x.Name.Contains(filter)).ToList();
+            DisplayedRows = Rows.Where(x => (x.Namespace + x.Name).Contains(filter)).ToList();
         }
     }
 }

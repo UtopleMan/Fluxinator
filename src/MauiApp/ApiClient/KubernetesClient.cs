@@ -7,50 +7,56 @@ using System.Text.Json;
 namespace Fluxinator.ApiClient;
 public class KubernetesDeploymentClient : IDeploymentClient
 {
-    private Kubernetes client;
-    private GenericClient genericClient;
+    private Dictionary<string, GenericClient> genericClients = new();
+    private Dictionary<string, Kubernetes> clients = new();
     private const string Kind = "Kustomization";
     private const string Group = "kustomize.toolkit.fluxcd.io";
     private const string Version = "v1beta2";
     private const string PluralName = "kustomizations";
     private const string ReconciliationRequested = "reconcile.fluxcd.io/requestedAt";
 
-    public void Initialize()
+    private void Initialize()
     {
-        var config = KubernetesClientConfiguration.BuildConfigFromConfigFile();
-        client = new Kubernetes(config);
-        genericClient = new GenericClient(client, Group, Version, PluralName);
+        var config = KubernetesClientConfiguration.LoadKubeConfig();
+        foreach (var context in config.Contexts)
+        {
+            var kubernetesConfig = KubernetesClientConfiguration.BuildConfigFromConfigObject(config, context.Name);
+            var client = new Kubernetes(kubernetesConfig);
+            var genericClient = new GenericClient(client, Group, Version, PluralName);
+            clients.Add(context.Name, client);
+            genericClients.Add(context.Name, genericClient);
+        }
     }
-    public async Task<IEnumerable<string>> GetNamespaces()
+    public async Task<IEnumerable<string>> GetNamespaces(string context)
     {
-        if (client == null) Initialize();
-        var result = await client.CoreV1.ListNamespaceAsync(timeoutSeconds: 10);
+        if (!clients.Any()) Initialize();
+        var result = await clients[context].CoreV1.ListNamespaceAsync(timeoutSeconds: 10);
         return result.Items.Select(x => x.Metadata.Name);
     }
-    public async Task<IEnumerable<Deployment>> GetDeployments(string namespaceName)
+    public async Task<IEnumerable<Deployment>> GetDeployments(string context, string namespaceName)
     {
-        if (client == null) Initialize();
-        var result = await client.CoreV1.ListNamespaceAsync(timeoutSeconds: 10);
+        if (!clients.Any()) Initialize();
+        var result = await clients[context].CoreV1.ListNamespaceAsync(timeoutSeconds: 10);
         var namespaceItem = result.Items.Single(x => x.Metadata.Name == namespaceName);
         var customResources = new CustomResourceList<KustomizationResource>();
         if (namespaceName != null)
-            customResources = await genericClient.ListNamespacedAsync<CustomResourceList<KustomizationResource>>(namespaceName).ConfigureAwait(false);
+            customResources = await genericClients[context].ListNamespacedAsync<CustomResourceList<KustomizationResource>>(namespaceName).ConfigureAwait(false);
         else
-            customResources = await genericClient.ListAsync<CustomResourceList<KustomizationResource>>().ConfigureAwait(false);
+            customResources = await genericClients[context].ListAsync<CustomResourceList<KustomizationResource>>().ConfigureAwait(false);
         return customResources.Items.Select(x => new Deployment(x.Metadata.Namespace(), x.Metadata.Name,
             x.Status.Conditions.OrderByDescending(y => y.Timestamp).First().Message,
             x.Status.Conditions.OrderByDescending(y => y.Timestamp).First().Reason, 
             x.Status.Conditions.OrderByDescending(y => y.Timestamp).First().Timestamp, 
             x.Status.Conditions.Select(y => new Run(y.Message, y.Reason, y.Timestamp))));
     }
-    public async Task Redeploy(string namespaceName, string name)
+    public async Task Redeploy(string context, string namespaceName, string name)
     {
-        if (client == null) Initialize();
+        if (!clients.Any()) Initialize();
         KustomizationResource resource;
         if (namespaceName != null)
-            resource = await genericClient.ReadNamespacedAsync<KustomizationResource>(namespaceName, name).ConfigureAwait(false);
+            resource = await genericClients[context].ReadNamespacedAsync<KustomizationResource>(namespaceName, name).ConfigureAwait(false);
         else
-            resource = await genericClient.ReadAsync<KustomizationResource>(name).ConfigureAwait(false);
+            resource = await genericClients[context].ReadAsync<KustomizationResource>(name).ConfigureAwait(false);
 
         var current = JsonSerializer.SerializeToDocument(resource);
         if (resource.Metadata.Annotations.ContainsKey(ReconciliationRequested))
@@ -62,8 +68,14 @@ public class KubernetesDeploymentClient : IDeploymentClient
         var crPatch = new V1Patch(patch, V1Patch.PatchType.JsonPatch);
 
         if (namespaceName != null)
-            await client.CustomObjects.PatchNamespacedCustomObjectAsync(crPatch, Group, Version, namespaceName, PluralName, resource.Metadata.Name).ConfigureAwait(false);
+            await clients[context].CustomObjects.PatchNamespacedCustomObjectAsync(crPatch, Group, Version, namespaceName, PluralName, resource.Metadata.Name).ConfigureAwait(false);
         else
-            await client.CustomObjects.PatchClusterCustomObjectAsync(crPatch, Group, Version, PluralName, resource.Metadata.Name).ConfigureAwait(false);
+            await clients[context].CustomObjects.PatchClusterCustomObjectAsync(crPatch, Group, Version, PluralName, resource.Metadata.Name).ConfigureAwait(false);
+    }
+
+    public IEnumerable<string> GetContexts()
+    {
+        if (!clients.Any()) Initialize();
+        return clients.Keys.ToList();
     }
 }
