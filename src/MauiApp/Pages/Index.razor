@@ -18,7 +18,7 @@
     <FluentCombobox slot="end" Appearance="Appearance.Filled" Options=@contexts @bind-Value="@selectedContext" style="margin-right: 5px;"></FluentCombobox>
     <FluentCombobox slot="end" Appearance="Appearance.Filled" Options=@namespaces @bind-Value="@namespaceName"></FluentCombobox>
 </FluentToolbar>
-<FluentDataGrid id="grid" GridTemplateColumns="85px 130px 8fr 130px 85px" RowsData=DisplayedRows ColumnDefinitions=Columns @ref=grid>
+<FluentDataGrid id="grid" GridTemplateColumns="85px 160px 8fr 130px 85px" RowsData=DisplayedRows ColumnDefinitions=Columns @ref=grid>
     <RowItemTemplate>
         <FluentDataGridRow>
             <FluentDataGridCell GridColumn=1>
