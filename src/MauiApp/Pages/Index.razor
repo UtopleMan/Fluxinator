@@ -30,13 +30,19 @@
                 }
                 else if (context.LatestReason == "Progressing")
                 {
-                        <FluentProgressRing></FluentProgressRing>
+                    <FluentProgressRing></FluentProgressRing>
+                }
+                else if (context.LatestReason == "DependencyNotReady")
+                {
+                    <FluentBadge Fill="lowlight" Color="lowlight">
+                        Pending
+                    </FluentBadge>
                 }
                 else
                 {
-                        <FluentBadge Fill="highlight" Color="highlight">
-                            Failed
-                        </FluentBadge>
+                    <FluentBadge Fill="highlight" Color="highlight">
+                        Failed
+                    </FluentBadge>
                 }
             </FluentDataGridCell>
             <FluentDataGridCell GridColumn=2>
