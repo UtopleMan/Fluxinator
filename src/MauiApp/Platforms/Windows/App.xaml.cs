@@ -1,6 +1,8 @@
 ﻿using Microsoft.UI;
 using Windows.Graphics;
 using Microsoft.UI.Windowing;
+using Fluxinator.Platforms.Windows;
+using Microsoft.UI.Xaml;
 
 namespace Fluxinator.WinUI;
 public partial class App : MauiWinUIApplication
@@ -22,5 +24,10 @@ public partial class App : MauiWinUIApplication
         });
     }
     protected override MauiApp CreateMauiApp() => MauiProgram.CreateMauiApp();
+    protected override void OnLaunched(LaunchActivatedEventArgs args)
+    {
+        base.OnLaunched(args);
+        FluxinatorWindowExtensions.Hwnd = ((MauiWinUIWindow)App.Current.Application.Windows.First().Handler.PlatformView).WindowHandle;
+    }
 }
 

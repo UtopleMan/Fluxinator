@@ -4,6 +4,7 @@
 @using System.Linq
 
 @inject IDeploymentClient client
+@inject INotificationService notificationService
 @page "/"
 <style>
     fluent-badge {
@@ -22,15 +23,21 @@
     <RowItemTemplate>
         <FluentDataGridRow>
             <FluentDataGridCell GridColumn=1>
-                @if (context.LatestReason == "ReconciliationSucceeded")
+                @if (context.DeploymentState == DeploymentStates.Success)
                 {
                         <FluentBadge Appearance="Appearance.Accent">
                             Succeeded
                         </FluentBadge>
                 }
-                else if (context.LatestReason == "Progressing")
+                else if (context.DeploymentState == DeploymentStates.Running)
                 {
                         <FluentProgressRing></FluentProgressRing>
+                }
+                else if (context.DeploymentState == DeploymentStates.Waiting)
+                {
+                    <FluentBadge Appearance="Appearance.Stealth">
+                        Waiting
+                    </FluentBadge>
                 }
                 else
                 {
@@ -83,13 +90,25 @@
     private async Task UpdateView()
     {
         var newRows = (await client.GetDeployments(selectedContext, namespaceName)).ToList();
-        var changed = false;
-        if (Rows.Count() != newRows.Count())
-            changed = true;
+        var changedRows = new List<Deployment>();
         foreach (var row in newRows)
-            if (!Rows.Any(x => x.Name == row.Name && x.Namespace == row.Namespace && x.LatestReason == row.LatestReason && x.LatestTime == row.LatestTime))
-                changed = true;
-        if (!changed) return;
+            if (!Rows.Any(x => x.Name == row.Name && x.Namespace == row.Namespace &&
+                x.DeploymentState == row.DeploymentState && x.LatestReason == row.LatestReason &&
+                x.LatestTime == row.LatestTime))
+                changedRows.Add(row);
+
+        if (!changedRows.Any()) return;
+
+
+        foreach (var changedRow in changedRows)
+        {
+            var existingRow = Rows.SingleOrDefault(x => x.Name == changedRow.Name && x.Namespace == changedRow.Namespace);
+            if (existingRow == null)
+                continue;
+            if (changedRow.DeploymentState == DeploymentStates.Failed)
+                notificationService.SendNotification($"Deployment {changedRow.Name} failed");
+        }
+
         Rows = newRows.ToList();
         DisplayedRows = Rows.Where(x => (x.Namespace + x.Name).Contains(filter)).OrderBy(x => x.Namespace + x.Name).ToList();
         StateHasChanged();

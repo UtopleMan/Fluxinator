@@ -17,12 +17,13 @@ public static class MauiProgram
 		builder.Services.AddMauiBlazorWebView();
 		builder.Services.AddSingleton<IDeploymentClient, KubernetesDeploymentClient>();
 #if WINDOWS
+        builder.Services.AddSingleton<Fluxinator.Shared.INotificationService, Fluxinator.Platforms.Windows.NotificationService>();
         builder.Services.AddSingleton<Fluxinator.Shared.ITrayService, Fluxinator.Platforms.Windows.TrayService>();
 #endif
 #if DEBUG
         builder.Services.AddBlazorWebViewDeveloperTools();
         builder.Services.AddFluentUIComponents();
 #endif
-		return builder.Build();
+        return builder.Build();
 	}
 }

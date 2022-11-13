@@ -43,11 +43,23 @@ public class KubernetesDeploymentClient : IDeploymentClient
             customResources = await genericClients[context].ListNamespacedAsync<CustomResourceList<KustomizationResource>>(namespaceName).ConfigureAwait(false);
         else
             customResources = await genericClients[context].ListAsync<CustomResourceList<KustomizationResource>>().ConfigureAwait(false);
-        return customResources.Items.Select(x => new Deployment(x.Metadata.Namespace(), x.Metadata.Name,
+        return customResources.Items.Select(x => new Deployment(x.Metadata.Namespace(), x.Metadata.Name, 
+            GetState(x.Status.Conditions.OrderByDescending(y => y.Timestamp).First().Reason, x.Status.Conditions.OrderByDescending(y => y.Timestamp).First().Message),
             x.Status.Conditions.OrderByDescending(y => y.Timestamp).First().Message,
             x.Status.Conditions.OrderByDescending(y => y.Timestamp).First().Reason, 
             x.Status.Conditions.OrderByDescending(y => y.Timestamp).First().Timestamp, 
             x.Status.Conditions.Select(y => new Run(y.Message, y.Reason, y.Timestamp))));
+    }
+    private DeploymentStates GetState(string reason, string message)
+    {
+        if (reason == "ReconciliationSucceeded")
+            return DeploymentStates.Success;
+        else if (reason == "Progressing")
+            return DeploymentStates.Running;
+        else if (message.Contains("' is not ready"))
+            return DeploymentStates.Waiting;
+        else
+            return DeploymentStates.Failed;
     }
     public async Task Redeploy(string context, string namespaceName, string name)
     {
