@@ -48,7 +48,7 @@ public class KubernetesDeploymentClient : IDeploymentClient
             x.Status.Conditions.OrderByDescending(y => y.Timestamp).First().Message,
             x.Status.Conditions.OrderByDescending(y => y.Timestamp).First().Reason, 
             x.Status.Conditions.OrderByDescending(y => y.Timestamp).First().Timestamp, 
-            x.Status.Conditions.Select(y => new Run(y.Message, y.Reason, y.Timestamp))));
+            x.Status.Conditions.Select(y => new Run(y.Message, y.Reason, y.Timestamp)))).OrderBy(x => x.Name);
     }
     private DeploymentStates GetState(string reason, string message)
     {
@@ -71,6 +71,9 @@ public class KubernetesDeploymentClient : IDeploymentClient
             resource = await genericClients[context].ReadAsync<KustomizationResource>(name).ConfigureAwait(false);
 
         var current = JsonSerializer.SerializeToDocument(resource);
+        if (resource.Metadata.Annotations == null)
+            resource.Metadata.Annotations = new Dictionary<string, string>();
+
         if (resource.Metadata.Annotations.ContainsKey(ReconciliationRequested))
             resource.Metadata.Annotations.Remove(ReconciliationRequested);
         resource.Metadata.Annotations.Add(ReconciliationRequested, DateTimeOffset.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffffff0Z"));
