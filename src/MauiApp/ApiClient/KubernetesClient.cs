@@ -43,18 +43,39 @@ public class KubernetesDeploymentClient : IDeploymentClient
             customResources = await genericClients[context].ListNamespacedAsync<CustomResourceList<KustomizationResource>>(namespaceName).ConfigureAwait(false);
         else
             customResources = await genericClients[context].ListAsync<CustomResourceList<KustomizationResource>>().ConfigureAwait(false);
-        return customResources.Items.Select(x => new Deployment(x.Metadata.Namespace(), x.Metadata.Name, 
-            GetState(x.Status.Conditions.OrderByDescending(y => y.Timestamp).First().Reason, x.Status.Conditions.OrderByDescending(y => y.Timestamp).First().Message),
-            x.Status.Conditions.OrderByDescending(y => y.Timestamp).First().Message,
-            x.Status.Conditions.OrderByDescending(y => y.Timestamp).First().Reason, 
-            x.Status.Conditions.OrderByDescending(y => y.Timestamp).First().Timestamp, 
-            x.Status.Conditions.Select(y => new Run(y.Message, y.Reason, y.Timestamp)))).OrderBy(x => x.Name);
+        return customResources.Items.Select(CreateDeployment).OrderBy(x => x.Name);
     }
+
+    private Deployment CreateDeployment(KustomizationResource x)
+    {
+        var condition = GetImportantCondition(x);
+
+        return new Deployment(x.Metadata.Namespace(), x.Metadata.Name, GetState(condition.Reason, condition.Message),
+            condition.Message,
+            condition.Reason,
+            condition.Timestamp,
+            x.Status.Conditions.Select(y => new Run(y.Message, y.Reason, y.Timestamp)));
+    }
+
+    private Model.Condition GetImportantCondition(KustomizationResource x)
+    {
+        var result = x.Status.Conditions.Last();
+        foreach (var condition in x.Status.Conditions)
+        {
+            if (condition.Reason == "BuildFailed" || condition.Reason == "ReconciliationSucceeded")
+                return condition;
+
+        }
+        return result;
+    }
+
     private DeploymentStates GetState(string reason, string message)
     {
         if (reason == "ReconciliationSucceeded")
             return DeploymentStates.Success;
         else if (reason == "Progressing")
+            return DeploymentStates.Running;
+        else if (reason == "ProgressingWithRetry")
             return DeploymentStates.Running;
         else if (message.Contains("' is not ready"))
             return DeploymentStates.Waiting;

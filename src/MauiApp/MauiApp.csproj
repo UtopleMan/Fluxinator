@@ -25,13 +25,20 @@
       <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">14.0</SupportedOSPlatformVersion>
       <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
       <TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>
-      <GenerateAppInstallerFile>False</GenerateAppInstallerFile>
+      <GenerateAppInstallerFile>True</GenerateAppInstallerFile>
         <AppxAutoIncrementPackageRevision>True</AppxAutoIncrementPackageRevision>
         <AppxSymbolPackageEnabled>False</AppxSymbolPackageEnabled>
         <GenerateTestArtifacts>True</GenerateTestArtifacts>
         <HoursBetweenUpdateChecks>0</HoursBetweenUpdateChecks>
         <UserSecretsId>e83e0fae-4206-4ab2-867d-127e86f87356</UserSecretsId>
         <Platforms>AnyCPU;x64</Platforms>
+        <GeneratePackageOnBuild>False</GeneratePackageOnBuild>
+        <Title>Fluxinator for FluxCD</Title>
+        <Description>FluxCD UI</Description>
+        <PackageLicenseExpression>GPL-3.0-or-later</PackageLicenseExpression>
+        <EnableNETAnalyzers>False</EnableNETAnalyzers>
+        <NeutralLanguage>en</NeutralLanguage>
+        <PlatformTarget>AnyCPU</PlatformTarget>
     </PropertyGroup>
 
     <ItemGroup>
